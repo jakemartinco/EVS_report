@@ -1,0 +1,150 @@
+---
+title: "European Value Study - Survey Response Report"
+author: "Jake Martin"
+date: "March 30, 2024"
+output:
+  pdf_document: default
+subtitle: Attitudes towards gender roles and immigration
+params:
+  country: NA
+---
+
+```{r setup, global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = "H", out.extra = "")
+
+library(haven)
+library(tidyverse)
+library(kableExtra)
+library(texreg)
+library(plotly)
+library(ggplot2)
+library(knitr)
+library(sjlabelled)
+
+survey_data <- read_sav('./data/clean_survey_data.sav')
+
+```
+
+## Description
+
+This report summarizes the results of two survey questions concerning attitudes toward immigrants and women with children. The data was collected as part of the European Values Study, which is a "large-scale, cross-national and longitudinal survey research program on how Europeans think about family, work, religion, politics, and society."
+
+This report focuses on two questions that were asked in the survey:
+
+\setlength{\leftskip}{1cm}
+
+***For each of the following statements I read out, can you tell me how strongly you agree or disagree with each.***
+
+*When a mother works for pay, the children suffer*
+
+*When jobs are scarce, employers should give priority to [nationality of respondent] people over immigrants*
+
+***Do you strongly agree, agree, disagree, or strongly disagree?***
+
+\setlength{\leftskip}{0pt}
+
+This report is based on responses from `r nrow(survey_data)` individuals age 18 or older.
+
+For each survey question, "strongly agree" and "agree" responses have been grouped as a binary variable. In some cases, respondents with missing data have been excluded from analysis (e.g. respondents with missing age information are not included in analysis that discusses age).
+
+## Tables
+Table 1 summarizes the relationship between education and the percent of respondents who agree that *"When a mother works for pay, the children suffer."* This table indicates that half of people with lower levels of education agree that children suffer when a mother works. 
+
+
+```{r, echo=FALSE}
+
+survey_data %>% 
+  drop_na(education, v72) %>%
+  group_by(as_character(education)) %>%
+  summarize(mean = round(mean(v72),2),
+            count = round(sum(gweight)))%>%
+  kbl(col.names = c("Education", "Mean","Weighted n"),
+      caption = "Percent agree: Gender roles by Education") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = "striped")
+
+```
+
+Table 2  summarizes the relationship between age (grouped into four categories) and the percent of respondents who agree that *"When jobs are scarce, employers should give priority to [nationality of respondent] people over immigrants"* This table indicates that more than 60% of people in each age group agree that employers should give priority to residents over immigrants. 
+
+```{r, results='asis', echo=FALSE}
+survey_data %>% 
+  drop_na(age, v80) %>%
+    mutate(age_4 = case_when(
+      (age < 35) ~ "18-34",
+      (age > 34 & age < 50) ~ "35-49",
+      (age > 49 & age < 65) ~ "50-64",
+      (age > 64) ~ "65+")) %>%
+  group_by(age_4) %>%
+  summarize(mean = round(mean(v80),2),
+            count = round(sum(gweight)))%>%
+  kbl(col.names = c("Age group", "Mean","Weighted n"),
+      caption = "Percent agree: Immigration views by Age") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = "striped")
+```
+
+## Graphs
+
+Figure 1 displays the relationship with age and the percent of respondents who agree that *"When a mother works for pay, the children suffer."*
+
+```{r, echo=FALSE}
+
+survey_data %>% 
+  drop_na(age, v72) %>%
+  group_by(age) %>%
+  summarize(mean = mean(v72),
+            count = sum(gweight)) %>% 
+  ggplot(aes(age, mean)) +
+           geom_line() + 
+  ggtitle("Figure 1: Gender roles by age") 
+
+
+```
+
+Figure 2 displays the relationship with age and the percent of respondents who agree that *"When jobs are scarce, employers should give priority to [nationality of respondent] people over immigrants."*
+
+```{r, echo=FALSE}
+
+survey_data %>% 
+  drop_na(age, v80) %>%
+  group_by(age) %>%
+  summarize(mean = mean(v80),
+            count = sum(gweight)) %>% 
+  ggplot(aes(age, mean)) +
+           geom_line() + 
+  ggtitle("Figure 2: Immigration attitudes by age") 
+
+
+```
+
+## Regressions
+
+Table 3 illustrates a regression model explaining the relationship between gender roles (Model 1) and immigration (Model 2) by age, age squared, sex, and education.
+
+```{r results='asis', echo=FALSE}
+
+v72_model <- lm(v72 ~ age + age_sq + sex + education_lower + education_higher, data = survey_data)
+v80_model <- lm(v80 ~ age + age_sq + sex + education_lower + education_higher, data = survey_data)
+
+v72_model_male_estimate <- summary(v72_model)$coefficients[4,1]
+v72_model_male_p <- summary(v72_model)$coefficients[4,4]
+
+v80_model_lowered_estimate <- summary(v80_model)$coefficients[5,1]
+v80_model_lowered_p <- summary(v80_model)$coefficients[5,4]
+
+coefnames <- c("Intercept",
+               "Age",
+               "Age squared",
+               "Sex: male",
+               "Education: lower",
+               "Education: higher")
+
+texreg(list(v72_model,v80_model),
+                    caption="Regression model to explain the relationship between views on gender roles and immigration by select demographics",
+                    custom.coef.names = coefnames
+       )
+
+```
+
+The regression model examining gender roles (Model 1) indicates indicates that there `r ifelse(v72_model_male_p <= .05, "is", "is not")` a statistically significant `r ifelse(v72_model_male_estimate > 0, "positive", "negative")` relationship between men and agreement (Estimate = `r round(v72_model_male_estimate,2)`, p-value = `r round(v72_model_male_p,2)`) that "when a mother works for pay, the children suffer."
+
+The regression model examining immigration attitudes  (Model 2) indicates that there `r ifelse(v80_model_lowered_p <= .05, "is", "is not")` a statistically significant `r ifelse(v80_model_lowered_estimate > 0, "positive", "negative")` relationship between lower education and agreement (Estimate = `r round(v80_model_lowered_estimate,2)`, p-value = `r round(v80_model_lowered_p,2)`) that "When jobs are scarce, employers should give priority to [nationality of respondent] people over immigrants."
